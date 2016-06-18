@@ -1,0 +1,22 @@
+# (C) 2016 by www.vanheusden.com
+VERSION=0.1
+
+DEBUG=-g -pedantic #-pg #-fprofile-arcs
+LDFLAGS+=$(DEBUG) -pthread -std=c++0x
+CXXFLAGS+=-O3 -Wall -DVERSION=\"$(VERSION)\" $(DEBUG) -std=c++0x
+
+OBJS=error.o font.o main.o source.o text.o
+
+all: pixelating
+
+pixelating: $(OBJS)
+	$(CXX) -Wall $(OBJS) $(LDFLAGS) -o pixelating
+
+install: pixelating
+	cp pixelating $(DESTDIR)/usr/local/bin
+
+uninstall: clean
+	rm -f $(DESTDIR)/usr/local/bin/pixelating
+
+clean:
+	rm -f $(OBJS) pixelating core gmon.out *.da
