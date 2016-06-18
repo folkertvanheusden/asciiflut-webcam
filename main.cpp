@@ -33,9 +33,22 @@ int main(int argc, char *argv[])
 				int posx = x / div;
 				int posy = y / div;
 
-				result[posy * 64 * 3 + posx * 3 + 0] = bytes[y * w * 3 + x * 3 + 0];
-				result[posy * 64 * 3 + posx * 3 + 1] = bytes[y * w * 3 + x * 3 + 1];
-				result[posy * 64 * 3 + posx * 3 + 2] = bytes[y * w * 3 + x * 3 + 2];
+				unsigned char *tgt = &result[posy * 64 * 3 + posx * 3];
+
+				int r = 0, g = 0, b = 0;
+				for(int Y=y; Y<y+divi; Y++)  {
+					for(int X=x; X<x+divi; X++) {
+						unsigned char *src = &bytes[Y * w * 3 + X * 3];
+
+						r += src[0];
+						g += src[1];
+						b += src[2];
+					}
+				}
+
+				tgt[0] = r / (divi * divi);
+				tgt[1] = g / (divi * divi);
+				tgt[2] = b / (divi * divi);
 			}
 		}
 
@@ -51,8 +64,8 @@ int main(int argc, char *argv[])
 
 		memcpy(prev, result, 64 * 32 * 3);
 
-		//sleep(1);
-		usleep(1000000/3);
+		sleep(1);
+		//usleep(1000000/3);
 	}
 
 	return 0;

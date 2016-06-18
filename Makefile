@@ -2,8 +2,8 @@
 VERSION=0.1
 
 DEBUG=-g -pedantic #-pg #-fprofile-arcs
-LDFLAGS+=$(DEBUG) -pthread -std=c++0x
-CXXFLAGS+=-O3 -Wall -DVERSION=\"$(VERSION)\" $(DEBUG) -std=c++0x
+LDFLAGS+=$(DEBUG) -pthread -std=c++0x -flto
+CXXFLAGS+=-O3 -Wall -DVERSION=\"$(VERSION)\" $(DEBUG) -std=c++0x -flto -fomit-frame-pointer -march=native
 
 OBJS=error.o font.o main.o source.o text.o
 
