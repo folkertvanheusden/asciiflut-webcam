@@ -7,11 +7,16 @@
 #include <unistd.h>
 
 #include "source.h"
+#include "utils-gfx.h"
 
 int main(int argc, char *argv[])
 {
+	const char *cam = "/dev/video0";
+	if (argc == 2)
+		cam = argv[1];
+
 	int w = 320, h = 240;
-	source_t *s = start_v4l2_thread("/dev/video0", &w, &h, none, false, false, 75);
+	source_t *s = start_v4l2_thread(cam, &w, &h, none, false, false, 75);
 	inc_users(s);
 
 	unsigned char *bytes = (unsigned char *)malloc(w * h * 3);
@@ -46,9 +51,26 @@ int main(int argc, char *argv[])
 					}
 				}
 
-				tgt[0] = r / (divi * divi);
-				tgt[1] = g / (divi * divi);
-				tgt[2] = b / (divi * divi);
+				r /= divi * divi;
+				g /= divi * divi;
+				b /= divi * divi;
+
+#if ADJUST_COLORS
+				double H, L, S;
+				rgb_to_hls(double(r) / 255, double(g) / 255, double(b) / 255, &H, &L, &S);
+				L = 0.5;
+				//S = 1.0;
+				double R, G, B;
+				hls_to_rgb(H, L, S, &R, &G, &B);
+
+				tgt[0] = R * 255.0;
+				tgt[1] = G * 255.0;
+				tgt[2] = B * 255.0;
+#else
+				tgt[0] = r;
+				tgt[1] = g;
+				tgt[2] = b;
+#endif
 			}
 		}
 
