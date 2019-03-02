@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include "source.h"
 #include "utils-gfx.h"
@@ -15,30 +19,42 @@ int main(int argc, char *argv[])
 	if (argc == 2)
 		cam = argv[1];
 
+	int pw = 64, ph = 32;
 	int w = 320, h = 240;
 	source_t *s = start_v4l2_thread(cam, &w, &h, none, false, false, 75);
 	inc_users(s);
 
 	unsigned char *bytes = (unsigned char *)malloc(w * h * 3);
 
-	unsigned char *result = (unsigned char *)malloc(64 * 32 * 3);
-	unsigned char *prev = (unsigned char *)malloc(64 * 32 * 3);
+	unsigned char *result = (unsigned char *)malloc(pw * ph * 3);
 
-	double d1 = double(w) / 64;
-	double d2 = double(h) / 32;
+	double d1 = double(w) / pw;
+	double d2 = double(h) / ph;
 
 	double div = std::max(d1, d2);
 	int divi = ceil(div) / 2;
 
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	struct sockaddr_in servaddr;
+	memset(&servaddr, 0, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_port = htons(5004);
+	//servaddr.sin_addr.s_addr = inet_addr("10.208.42.159");
+	servaddr.sin_addr.s_addr = inet_addr("192.168.64.124");
+
+	char buffer[65536];
+	memset(buffer, 0x00, sizeof buffer);
+
 	for(;;) {
-		get_frame_hls(s, bytes);
+		int len = 0;
+		get_frame(s, bytes, &len);
 
 		for(int y=0; y<h; y += divi) {
 			for(int x=0; x<w; x += divi) {
 				int posx = x / div;
 				int posy = y / div;
 
-				unsigned char *tgt = &result[posy * 64 * 3 + posx * 3];
+				unsigned char *tgt = &result[posy * pw * 3 + posx * 3];
 
 				int r = 0, g = 0, b = 0;
 				for(int Y=y; Y<y+divi; Y++)  {
@@ -55,39 +71,34 @@ int main(int argc, char *argv[])
 				g /= divi * divi;
 				b /= divi * divi;
 
-#if ADJUST_COLORS
-				double H, L, S;
-				rgb_to_hls(double(r) / 255, double(g) / 255, double(b) / 255, &H, &L, &S);
-				L = 0.5;
-				//S = 1.0;
-				double R, G, B;
-				hls_to_rgb(H, L, S, &R, &G, &B);
-
-				tgt[0] = R * 255.0;
-				tgt[1] = G * 255.0;
-				tgt[2] = B * 255.0;
-#else
 				tgt[0] = r;
 				tgt[1] = g;
 				tgt[2] = b;
-#endif
 			}
 		}
 
-		for(int y=0; y<32; y++) {
-			for(int x=0; x<64; x++) {
-				unsigned char *p = &result[y * 64 * 3 + x * 3];
-				unsigned char *pp = &prev[y * 64 * 3 + x * 3];
+		buffer[0] = 1;
+		buffer[1] = 0;
+		int o = 2;
+		for(int y=0; y<ph; y++) {
+			for(int x=0; x<pw; x++) {
+				unsigned char *p = &result[y * pw * 3 + x * 3];
 
-				if (memcmp(p, pp, 3))
-					printf("PX %d %d %02x%02x%02x\n", x, y, p[0], p[1], p[2]);
+				buffer[o++] = x;
+				buffer[o++] = x >> 8;
+				buffer[o++] = y;
+				buffer[o++] = y >> 8;
+				buffer[o++] = p[0];
+				buffer[o++] = p[1];
+				buffer[o++] = p[2];
 			}
 		}
 
-		memcpy(prev, result, 64 * 32 * 3);
-
-		sleep(1);
-		//usleep(1000000/3);
+		if (o) {
+			// printf("%d\n", o);
+			//			printf("%s\n", buffer);
+			sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+		}
 	}
 
 	return 0;
