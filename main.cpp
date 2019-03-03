@@ -80,8 +80,8 @@ int main(int argc, char *argv[])
 		buffer[0] = 1;
 		buffer[1] = 0;
 		int o = 2;
-		for(int y=0; y<ph; y++) {
-			for(int x=0; x<pw; x++) {
+		for(int y=0; y<h / div; y++) {
+			for(int x=0; x<w / div; x++) {
 				unsigned char *p = &result[y * pw * 3 + x * 3];
 
 				buffer[o++] = x;
