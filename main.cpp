@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		buffer[0] = 1;
+		buffer[0] = 0;
 		buffer[1] = 0;
 		int o = 2;
 		for(int y=0; y<h / div; y++) {
@@ -91,14 +91,16 @@ int main(int argc, char *argv[])
 				buffer[o++] = p[0];
 				buffer[o++] = p[1];
 				buffer[o++] = p[2];
+
+				if (o >= 1122 - 6) {
+					sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+					o = 2;
+				}
 			}
 		}
 
-		if (o) {
-			// printf("%d\n", o);
-			//			printf("%s\n", buffer);
+		if (o > 2)
 			sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
-		}
 	}
 
 	return 0;
