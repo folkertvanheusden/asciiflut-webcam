@@ -24,6 +24,8 @@ void help()
 	printf("-x  x offset where to put the image in pixelflut\n");
 	printf("-y  y offset where to put the image in pixelflut\n");
 	printf("-t  IP address(! not a hostname) of the pixelflut server\n");
+	printf("-p  port number\n");
+	printf("-T  use TCP when sending to pixelflut server\n");
 	printf("\n");
 	printf("Note: this version is for the UDP pixelflut server\n");
 }
@@ -36,10 +38,20 @@ int main(int argc, char *argv[])
 	int pw = 64, ph = 32;
 	int w = 640, h = 480;
 	int xo = 0, yo = 0;
+	bool tcp = false;
+	int port = 5004;
 
 	int c = -1;
-	while((c = getopt(argc, argv, "d:W:H:x:y:t:h")) != -1) {
+	while((c = getopt(argc, argv, "d:W:H:x:y:t:Tp:h")) != -1) {
 		switch(c) {
+			case 'p':
+				port = atoi(optarg);
+				break;
+
+			case 'T':
+				tcp = true;
+				break;
+
 			case 'd':
 				cam = optarg;
 				break;
@@ -88,13 +100,14 @@ int main(int argc, char *argv[])
 	double div = std::max(d1, d2);
 	int divi = ceil(div) / 2;
 
-	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	int fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 	struct sockaddr_in servaddr;
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_port = htons(5004);
-	//servaddr.sin_addr.s_addr = inet_addr("10.208.42.159");
-	servaddr.sin_addr.s_addr = inet_addr("192.168.64.124");
+	servaddr.sin_port = htons(port);
+	servaddr.sin_addr.s_addr = inet_addr(ip);
+
+	bool connected = false;
 
 	char buffer[65536];
 	memset(buffer, 0x00, sizeof buffer);
@@ -131,33 +144,68 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		buffer[0] = 0;
-		buffer[1] = 0;
-		int o = 2;
-		for(int y=0; y<h / div; y++) {
-			for(int x=0; x<w / div; x++) {
-				unsigned char *p = &result[y * pw * 3 + x * 3];
+		if (tcp) {
+			if (!connected)
+				connected = connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0;
 
-				int X = xo + x;
-				int Y = yo + y;
+			if (connected) {
+				for(int y=0; y<h / div; y++) {
+					for(int x=0; x<w / div; x++) {
+						unsigned char *p = &result[y * pw * 3 + x * 3];
 
-				buffer[o++] = X;
-				buffer[o++] = X >> 8;
-				buffer[o++] = Y;
-				buffer[o++] = Y >> 8;
-				buffer[o++] = p[0];
-				buffer[o++] = p[1];
-				buffer[o++] = p[2];
+						int X = xo + x;
+						int Y = yo + y;
 
-				if (o >= 1122 - 6) {
-					sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
-					o = 2;
+						char buffer[128];
+						int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n",
+								X, Y, p[0], p[1], p[2]);
+
+						char *bp = buffer;
+						while(len > 0) {
+							int rc = write(fd, bp, len);
+
+							if (rc <= 0) {
+								close(fd);
+								connected = false;
+								break;
+							}
+
+							len -= rc;
+							bp += rc;
+						}
+					}
 				}
 			}
 		}
+		else {
+			buffer[0] = 0;
+			buffer[1] = 0;
+			int o = 2;
+			for(int y=0; y<h / div; y++) {
+				for(int x=0; x<w / div; x++) {
+					unsigned char *p = &result[y * pw * 3 + x * 3];
 
-		if (o > 2)
-			sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+					int X = xo + x;
+					int Y = yo + y;
+
+					buffer[o++] = X;
+					buffer[o++] = X >> 8;
+					buffer[o++] = Y;
+					buffer[o++] = Y >> 8;
+					buffer[o++] = p[0];
+					buffer[o++] = p[1];
+					buffer[o++] = p[2];
+
+					if (o >= 1122 - 6) {
+						sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+						o = 2;
+					}
+				}
+			}
+
+			if (o > 2)
+				sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+		}
 	}
 
 	return 0;
