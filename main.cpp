@@ -1,4 +1,4 @@
-// (C) 2016 by www.vanheusden.com
+// (C) 2016-2019 by www.vanheusden.com
 #include <algorithm>
 #include <math.h>
 #include <stdio.h>
@@ -13,14 +13,68 @@
 #include "source.h"
 #include "utils-gfx.h"
 
+void help()
+{
+	printf("(C) 2016-2019 by folkert@vanheusden.com\n");
+	printf("released under agpl v3.0\n");
+	printf("\n");
+	printf("-d  video4linux device\n");
+	printf("-W  width of the pixelflut device in pixels\n");
+	printf("-H  height of the pixelflut device in pixels\n");
+	printf("-x  x offset where to put the image in pixelflut\n");
+	printf("-y  y offset where to put the image in pixelflut\n");
+	printf("-t  IP address(! not a hostname) of the pixelflut server\n");
+	printf("\n");
+	printf("Note: this version is for the UDP pixelflut server\n");
+}
+
 int main(int argc, char *argv[])
 {
 	const char *cam = "/dev/video0";
-	if (argc == 2)
-		cam = argv[1];
+	const char *ip = "192.168.64.124";
 
 	int pw = 64, ph = 32;
-	int w = 320, h = 240;
+	int w = 640, h = 480;
+	int xo = 0, yo = 0;
+
+	int c = -1;
+	while((c = getopt(argc, argv, "d:W:H:x:y:t:h")) != -1) {
+		switch(c) {
+			case 'd':
+				cam = optarg;
+				break;
+
+			case 'W':
+				pw = atoi(optarg);
+				break;
+
+			case 'H':
+				ph = atoi(optarg);
+				break;
+
+			case 'x':
+				xo = atoi(optarg);
+				break;
+
+			case 'y':
+				yo = atoi(optarg);
+				break;
+
+			case 't':
+				ip = optarg;
+				break;
+
+			case 'h':
+				help();
+				return 0;
+
+			default:
+				help();
+				return 1;
+		}
+	}
+
+
 	source_t *s = start_v4l2_thread(cam, &w, &h, none, false, false, 75);
 	inc_users(s);
 
@@ -84,10 +138,13 @@ int main(int argc, char *argv[])
 			for(int x=0; x<w / div; x++) {
 				unsigned char *p = &result[y * pw * 3 + x * 3];
 
-				buffer[o++] = x;
-				buffer[o++] = x >> 8;
-				buffer[o++] = y;
-				buffer[o++] = y >> 8;
+				int X = xo + x;
+				int Y = yo + y;
+
+				buffer[o++] = X;
+				buffer[o++] = X >> 8;
+				buffer[o++] = Y;
+				buffer[o++] = Y >> 8;
 				buffer[o++] = p[0];
 				buffer[o++] = p[1];
 				buffer[o++] = p[2];
