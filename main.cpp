@@ -61,6 +61,12 @@ int main(int argc, char *argv[])
 					for(int X=x; X<x+divi; X++) {
 						unsigned char *src = &bytes[Y * w * 3 + X * 3];
 
+						if (X >= w)
+							break;
+
+						if (Y >= h)
+							break;
+
 						r += src[0];
 						g += src[1];
 						b += src[2];
