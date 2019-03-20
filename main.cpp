@@ -27,7 +27,6 @@ void help()
 	printf("-p  port number\n");
 	printf("-T  use TCP when sending to pixelflut server\n");
 	printf("\n");
-	printf("Note: this version is for the UDP pixelflut server\n");
 }
 
 int main(int argc, char *argv[])
