@@ -1,5 +1,5 @@
-# (C) 2016 by www.vanheusden.com
-VERSION=0.1
+# (C) 2016-2019 by www.vanheusden.com
+VERSION=1.0
 
 DEBUG=-g -pedantic #-pg #-fprofile-arcs
 LDFLAGS+=$(DEBUG) -pthread -std=c++0x -flto

@@ -1,6 +1,8 @@
 // (C) 2016-2019 by www.vanheusden.com
 #include <algorithm>
+#include <errno.h>
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,6 +87,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	signal(SIGPIPE, SIG_IGN);
 
 	source_t *s = start_v4l2_thread(cam, &w, &h, none, false, false, 75);
 	inc_users(s);
@@ -99,7 +102,8 @@ int main(int argc, char *argv[])
 	double div = std::max(d1, d2);
 	int divi = ceil(div) / 2;
 
-	int fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+	int fd = -1;
+
 	struct sockaddr_in servaddr;
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -150,8 +154,13 @@ int main(int argc, char *argv[])
 		}
 
 		if (tcp) {
-			if (!connected)
+			if (!connected) {
+				fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+
 				connected = connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0;
+				if (!connected)
+					printf("%s (%d)\n", strerror(errno), errno);
+			}
 
 			if (connected) {
 				for(int y=0; y<h / div; y++) {
@@ -170,9 +179,10 @@ int main(int argc, char *argv[])
 							int rc = write(fd, bp, len);
 
 							if (rc <= 0) {
+								printf("%s (%d)\n", strerror(errno), errno);
 								close(fd);
 								connected = false;
-								break;
+								goto fail;
 							}
 
 							len -= rc;
@@ -180,6 +190,8 @@ int main(int argc, char *argv[])
 						}
 					}
 				}
+fail:
+				fd = fd;
 			}
 		}
 		else {
