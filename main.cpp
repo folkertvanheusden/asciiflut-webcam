@@ -34,7 +34,7 @@ void help()
 int main(int argc, char *argv[])
 {
 	const char *cam = "/dev/video0";
-	const char *ip = "192.168.64.124";
+	const char *ip = nullptr;
 
 	int pw = 64, ph = 32;
 	int w = 640, h = 480;
@@ -85,6 +85,12 @@ int main(int argc, char *argv[])
 				help();
 				return 1;
 		}
+	}
+
+	if (!ip) {
+		printf("Please provide an ip-address (maybe even a port number) of your pixelflut display.\n\n");
+		help();
+		return 1;
 	}
 
 	signal(SIGPIPE, SIG_IGN);
