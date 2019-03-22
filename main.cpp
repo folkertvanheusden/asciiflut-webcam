@@ -95,6 +95,8 @@ void send_tcp_frame(const struct sockaddr_in & servaddr, const uint8_t *const re
 			}
 		}
 	}
+
+	close(fd);
 }
 
 void send_udp_frame(const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
@@ -105,6 +107,7 @@ void send_udp_frame(const struct sockaddr_in & servaddr, const uint8_t *const re
 
 	buffer[0] = 0;
 	buffer[1] = 0;
+
 	int o = 2;
 	for(int y=0; y<desth; y++) {
 		for(int x=0; x<destw; x++) {
