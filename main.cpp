@@ -15,6 +15,39 @@
 #include "source.h"
 #include "utils-gfx.h"
 
+void do_resize(const int win, const int hin, const uint8_t *const in, const int wout, const int hout, uint8_t **out)
+{
+	*out = (uint8_t *)malloc(wout * hout * 3);
+
+	const int max_offset = wout * hout * 3 - 3;
+
+	const double maxw = std::max(win, wout);
+	const double maxh = std::max(hin, hout);
+
+	const double hins = hin / maxh;
+	const double wins = win / maxw;
+	const double houts = hout / maxh;
+	const double wouts = wout / maxw;
+
+	for(int y=0; y<maxh; y++) {
+		const int in_scaled_y = y * hins;
+		const int in_scaled_o = in_scaled_y * win * 3;
+		const int out_scaled_y = y * houts;
+		const int out_scaled_o = out_scaled_y * wout * 3;
+
+		for(int x=0; x<maxw; x++) {
+			int ino = in_scaled_o + int(x * wins) * 3;
+			int outo = out_scaled_o + int(x * wouts) * 3;
+
+			outo = std::min(max_offset, outo);
+
+			(*out)[outo + 0] = in[ino + 0];
+			(*out)[outo + 1] = in[ino + 1];
+			(*out)[outo + 2] = in[ino + 2];
+		}
+	}
+}
+
 void help()
 {
 	printf("(C) 2016-2019 by folkert@vanheusden.com\n");
@@ -28,6 +61,7 @@ void help()
 	printf("-t  IP address(! not a hostname) of the pixelflut server\n");
 	printf("-p  port number\n");
 	printf("-T  use TCP when sending to pixelflut server\n");
+	printf("-I  ignore aspect ratio\n");
 	printf("\n");
 }
 
@@ -41,10 +75,15 @@ int main(int argc, char *argv[])
 	int xo = 0, yo = 0;
 	bool tcp = false;
 	int port = 5004;
+	bool aspect_ratio = true;
 
 	int c = -1;
-	while((c = getopt(argc, argv, "d:W:H:x:y:t:Tp:h")) != -1) {
+	while((c = getopt(argc, argv, "Id:W:H:x:y:t:Tp:h")) != -1) {
 		switch(c) {
+			case 'I':
+				aspect_ratio = false;
+				break;
+
 			case 'p':
 				port = atoi(optarg);
 				break;
@@ -100,13 +139,18 @@ int main(int argc, char *argv[])
 
 	unsigned char *bytes = (unsigned char *)malloc(w * h * 3);
 
-	unsigned char *result = (unsigned char *)malloc(pw * ph * 3);
-
 	double d1 = double(w) / pw;
 	double d2 = double(h) / ph;
-
 	double div = std::max(d1, d2);
-	int divi = ceil(div) / 2;
+	int destw = std::min(pw, int(w / div));
+	int desth = std::min(ph, int(h / div));
+
+	if (!aspect_ratio) {
+		destw = pw;
+		desth = ph;
+	}
+
+	printf("target w/h: %dx%d\n", destw, desth);
 
 	int fd = -1;
 
@@ -116,8 +160,6 @@ int main(int argc, char *argv[])
 	servaddr.sin_port = htons(port);
 	servaddr.sin_addr.s_addr = inet_addr(ip);
 
-	bool connected = false;
-
 	char buffer[65536];
 	memset(buffer, 0x00, sizeof buffer);
 
@@ -125,88 +167,57 @@ int main(int argc, char *argv[])
 		int len = 0;
 		get_frame(s, bytes, &len);
 
-		for(int y=0; y<h; y += divi) {
-			for(int x=0; x<w; x += divi) {
-				int posx = x / div;
-				int posy = y / div;
-
-				unsigned char *tgt = &result[posy * pw * 3 + posx * 3];
-
-				int r = 0, g = 0, b = 0;
-				for(int Y=y; Y<y+divi; Y++)  {
-					for(int X=x; X<x+divi; X++) {
-						unsigned char *src = &bytes[Y * w * 3 + X * 3];
-
-						if (X >= w)
-							break;
-
-						if (Y >= h)
-							break;
-
-						r += src[0];
-						g += src[1];
-						b += src[2];
-					}
-				}
-
-				r /= divi * divi;
-				g /= divi * divi;
-				b /= divi * divi;
-
-				tgt[0] = r;
-				tgt[1] = g;
-				tgt[2] = b;
-			}
-		}
+		uint8_t *resized = NULL;
+		do_resize(w, h, bytes, destw, desth, &resized);
 
 		if (tcp) {
-			if (!connected) {
-				fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+			for(int y=0; y<desth; y++) {
+				for(int x=0; x<destw; x++) {
+					unsigned char *p = &resized[y * destw * 3 + x * 3];
 
-				connected = connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0;
-				if (!connected)
-					printf("%s (%d)\n", strerror(errno), errno);
-			}
+					int X = xo + x;
+					int Y = yo + y;
 
-			if (connected) {
-				for(int y=0; y<h / div; y++) {
-					for(int x=0; x<w / div; x++) {
-						unsigned char *p = &result[y * pw * 3 + x * 3];
+					char buffer[128];
+					int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n",
+							X, Y, p[0], p[1], p[2]);
 
-						int X = xo + x;
-						int Y = yo + y;
+					if (fd == -1) {
+						fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 
-						char buffer[128];
-						int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n",
-								X, Y, p[0], p[1], p[2]);
-
-						char *bp = buffer;
-						while(len > 0) {
-							int rc = write(fd, bp, len);
-
-							if (rc <= 0) {
-								printf("%s (%d)\n", strerror(errno), errno);
-								close(fd);
-								connected = false;
-								goto fail;
-							}
-
-							len -= rc;
-							bp += rc;
+						if (connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
+							close(fd);
+							fd = -1;
+							continue;
 						}
 					}
+
+					char *bp = buffer;
+					while(len > 0) {
+						int rc = write(fd, bp, len);
+
+						if (rc <= 0) {
+							printf("%s (%d)\n", strerror(errno), errno);
+							close(fd);
+							fd = -1;
+							break;
+						}
+
+						len -= rc;
+						bp += rc;
+					}
 				}
-fail:
-				fd = fd;
 			}
 		}
 		else {
+			fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+
 			buffer[0] = 0;
 			buffer[1] = 0;
 			int o = 2;
-			for(int y=0; y<h / div; y++) {
-				for(int x=0; x<w / div; x++) {
-					unsigned char *p = &result[y * pw * 3 + x * 3];
+			for(int y=0; y<desth; y++) {
+				for(int x=0; x<destw; x++) {
+					unsigned char *p = &resized[y * destw * 3 + x * 3];
 
 					int X = xo + x;
 					int Y = yo + y;
@@ -229,6 +240,8 @@ fail:
 			if (o > 2)
 				sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
 		}
+
+		free(resized);
 	}
 
 	return 0;
