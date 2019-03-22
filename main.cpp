@@ -48,6 +48,23 @@ void do_resize(const int win, const int hin, const uint8_t *const in, const int 
 	}
 }
 
+bool WRITE(const int fd, const char *what, int len)
+{
+	while(len > 0) {
+		int rc = write(fd, what, len);
+
+		if (rc <= 0) {
+			printf("%s (%d)\n", strerror(errno), errno);
+			return false;
+		}
+
+		len -= rc;
+		what += rc;
+	}
+
+	return true;
+}
+
 void help()
 {
 	printf("(C) 2016-2019 by folkert@vanheusden.com\n");
@@ -179,8 +196,7 @@ int main(int argc, char *argv[])
 					int Y = yo + y;
 
 					char buffer[128];
-					int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n",
-							X, Y, p[0], p[1], p[2]);
+					int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", X, Y, p[0], p[1], p[2]);
 
 					if (fd == -1) {
 						fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
@@ -192,19 +208,9 @@ int main(int argc, char *argv[])
 						}
 					}
 
-					char *bp = buffer;
-					while(len > 0) {
-						int rc = write(fd, bp, len);
-
-						if (rc <= 0) {
-							printf("%s (%d)\n", strerror(errno), errno);
-							close(fd);
-							fd = -1;
-							break;
-						}
-
-						len -= rc;
-						bp += rc;
+					if (!WRITE(fd, buffer, len)) {
+						close(fd);
+						fd = -1;
 					}
 				}
 			}
