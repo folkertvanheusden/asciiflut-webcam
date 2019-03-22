@@ -48,6 +48,22 @@ void do_resize(const int win, const int hin, const uint8_t *const in, const int 
 	}
 }
 
+void do_crop(const int win, const int hin, const uint8_t *const in, const int wout, const int hout, uint8_t **out)
+{
+	*out = (uint8_t *)malloc(wout * hout * 3);
+
+	for(int y=0; y<std::min(hin, hout); y++) {
+		for(int x=0; x<std::min(win, wout); x++) {
+			int ino = y * win * 3 + x * 3;
+			int outo = y * wout * 3 + x * 3;
+
+			(*out)[outo + 0] = in[ino + 0];
+			(*out)[outo + 1] = in[ino + 1];
+			(*out)[outo + 2] = in[ino + 2];
+		}
+	}
+}
+
 bool WRITE(const int fd, const char *what, int len)
 {
 	while(len > 0) {
@@ -143,6 +159,7 @@ void help()
 	printf("-p  port number\n");
 	printf("-T  use TCP when sending to pixelflut server\n");
 	printf("-I  ignore aspect ratio\n");
+	printf("-C  do not resize, crop\n");
 	printf("\n");
 }
 
@@ -156,11 +173,15 @@ int main(int argc, char *argv[])
 	int xo = 0, yo = 0;
 	bool tcp = false;
 	int port = 5004;
-	bool aspect_ratio = true;
+	bool aspect_ratio = true, crop = false;
 
 	int c = -1;
-	while((c = getopt(argc, argv, "Id:W:H:x:y:t:Tp:h")) != -1) {
+	while((c = getopt(argc, argv, "CId:W:H:x:y:t:Tp:h")) != -1) {
 		switch(c) {
+			case 'C':
+				crop = true;
+				break;
+
 			case 'I':
 				aspect_ratio = false;
 				break;
@@ -246,12 +267,22 @@ int main(int argc, char *argv[])
 		get_frame(s, bytes, &len);
 
 		uint8_t *resized = NULL;
-		do_resize(w, h, bytes, destw, desth, &resized);
+		if (crop) {
+			do_crop(w, h, bytes, pw, ph, &resized);
 
-		if (tcp)
-			send_tcp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
-		else 
-			send_udp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
+			if (tcp)
+				send_tcp_frame(&fd, servaddr, resized, pw, ph, xo, yo);
+			else 
+				send_udp_frame(&fd, servaddr, resized, pw, ph, xo, yo);
+		}
+		else {
+			do_resize(w, h, bytes, destw, desth, &resized);
+
+			if (tcp)
+				send_tcp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
+			else 
+				send_udp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
+		}
 
 		free(resized);
 	}
