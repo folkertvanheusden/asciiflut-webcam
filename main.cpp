@@ -252,6 +252,12 @@ int main(int argc, char *argv[])
 		desth = ph;
 	}
 
+	if (crop) {
+		div = std::min(d1, d2);
+		destw = int(w / div);
+		desth = int(h / div);
+	}
+
 	printf("target w/h: %dx%d\n", destw, desth);
 
 	struct sockaddr_in servaddr;
@@ -266,25 +272,32 @@ int main(int argc, char *argv[])
 		int len = 0;
 		get_frame(s, bytes, &len);
 
-		uint8_t *resized = NULL;
 		if (crop) {
-			do_crop(w, h, bytes, pw, ph, &resized);
+			uint8_t *resized = NULL;
+			do_resize(w, h, bytes, destw, desth, &resized);
+
+			uint8_t *cropped = NULL;
+			do_crop(destw, desth, resized, std::min(destw, pw), std::min(desth, ph), &cropped);
+			free(resized);
 
 			if (tcp)
-				send_tcp_frame(&fd, servaddr, resized, pw, ph, xo, yo);
+				send_tcp_frame(&fd, servaddr, cropped, pw, ph, xo, yo);
 			else 
-				send_udp_frame(&fd, servaddr, resized, pw, ph, xo, yo);
+				send_udp_frame(&fd, servaddr, cropped, pw, ph, xo, yo);
+
+			free(cropped);
 		}
 		else {
+			uint8_t *resized = NULL;
 			do_resize(w, h, bytes, destw, desth, &resized);
 
 			if (tcp)
 				send_tcp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
 			else 
 				send_udp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
-		}
 
-		free(resized);
+			free(resized);
+		}
 	}
 
 	return 0;
