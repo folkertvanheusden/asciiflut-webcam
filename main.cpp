@@ -97,6 +97,43 @@ void send_tcp_frame(const struct sockaddr_in & servaddr, const uint8_t *const re
 	}
 }
 
+void send_udp_frame(const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
+{
+	char buffer[65536];
+
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+	buffer[0] = 0;
+	buffer[1] = 0;
+	int o = 2;
+	for(int y=0; y<desth; y++) {
+		for(int x=0; x<destw; x++) {
+			const uint8_t *p = &resized[y * destw * 3 + x * 3];
+
+			int X = xo + x;
+			int Y = yo + y;
+
+			buffer[o++] = X;
+			buffer[o++] = X >> 8;
+			buffer[o++] = Y;
+			buffer[o++] = Y >> 8;
+			buffer[o++] = p[0];
+			buffer[o++] = p[1];
+			buffer[o++] = p[2];
+
+			if (o >= 1122 - 6) {
+				sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+				o = 2;
+			}
+		}
+	}
+
+	if (o > 2)
+		sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+
+	close(fd);
+}
+
 void help()
 {
 	printf("(C) 2016-2019 by folkert@vanheusden.com\n");
@@ -207,9 +244,6 @@ int main(int argc, char *argv[])
 	servaddr.sin_port = htons(port);
 	servaddr.sin_addr.s_addr = inet_addr(ip);
 
-	char buffer[65536];
-	memset(buffer, 0x00, sizeof buffer);
-
 	for(;;) {
 		int len = 0;
 		get_frame(s, bytes, &len);
@@ -219,39 +253,8 @@ int main(int argc, char *argv[])
 
 		if (tcp)
 			send_tcp_frame(servaddr, resized, destw, desth, xo, yo);
-		else {
-			int fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
-
-			buffer[0] = 0;
-			buffer[1] = 0;
-			int o = 2;
-			for(int y=0; y<desth; y++) {
-				for(int x=0; x<destw; x++) {
-					unsigned char *p = &resized[y * destw * 3 + x * 3];
-
-					int X = xo + x;
-					int Y = yo + y;
-
-					buffer[o++] = X;
-					buffer[o++] = X >> 8;
-					buffer[o++] = Y;
-					buffer[o++] = Y >> 8;
-					buffer[o++] = p[0];
-					buffer[o++] = p[1];
-					buffer[o++] = p[2];
-
-					if (o >= 1122 - 6) {
-						sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
-						o = 2;
-					}
-				}
-			}
-
-			if (o > 2)
-				sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
-
-			close(fd);
-		}
+		else 
+			send_udp_frame(servaddr, resized, destw, desth, xo, yo);
 
 		free(resized);
 	}
