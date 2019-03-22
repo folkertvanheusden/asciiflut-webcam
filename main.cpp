@@ -65,6 +65,38 @@ bool WRITE(const int fd, const char *what, int len)
 	return true;
 }
 
+void send_tcp_frame(const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
+{
+	int fd = -1;
+
+	for(int y=0; y<desth; y++) {
+		for(int x=0; x<destw; x++) {
+			const uint8_t *p = &resized[y * destw * 3 + x * 3];
+
+			int X = xo + x;
+			int Y = yo + y;
+
+			char buffer[128];
+			int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", X, Y, p[0], p[1], p[2]);
+
+			if (fd == -1) {
+				fd = socket(AF_INET, SOCK_STREAM, 0);
+
+				if (connect(fd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
+					close(fd);
+					fd = -1;
+					continue;
+				}
+			}
+
+			if (!WRITE(fd, buffer, len)) {
+				close(fd);
+				fd = -1;
+			}
+		}
+	}
+}
+
 void help()
 {
 	printf("(C) 2016-2019 by folkert@vanheusden.com\n");
@@ -169,8 +201,6 @@ int main(int argc, char *argv[])
 
 	printf("target w/h: %dx%d\n", destw, desth);
 
-	int fd = -1;
-
 	struct sockaddr_in servaddr;
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -187,36 +217,10 @@ int main(int argc, char *argv[])
 		uint8_t *resized = NULL;
 		do_resize(w, h, bytes, destw, desth, &resized);
 
-		if (tcp) {
-			for(int y=0; y<desth; y++) {
-				for(int x=0; x<destw; x++) {
-					unsigned char *p = &resized[y * destw * 3 + x * 3];
-
-					int X = xo + x;
-					int Y = yo + y;
-
-					char buffer[128];
-					int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", X, Y, p[0], p[1], p[2]);
-
-					if (fd == -1) {
-						fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
-
-						if (connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
-							close(fd);
-							fd = -1;
-							continue;
-						}
-					}
-
-					if (!WRITE(fd, buffer, len)) {
-						close(fd);
-						fd = -1;
-					}
-				}
-			}
-		}
+		if (tcp)
+			send_tcp_frame(servaddr, resized, destw, desth, xo, yo);
 		else {
-			fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+			int fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 
 			buffer[0] = 0;
 			buffer[1] = 0;
@@ -245,6 +249,8 @@ int main(int argc, char *argv[])
 
 			if (o > 2)
 				sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+
+			close(fd);
 		}
 
 		free(resized);
