@@ -65,10 +65,8 @@ bool WRITE(const int fd, const char *what, int len)
 	return true;
 }
 
-void send_tcp_frame(const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
+void send_tcp_frame(int *const fd, const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
 {
-	int fd = -1;
-
 	for(int y=0; y<desth; y++) {
 		for(int x=0; x<destw; x++) {
 			const uint8_t *p = &resized[y * destw * 3 + x * 3];
@@ -79,31 +77,27 @@ void send_tcp_frame(const struct sockaddr_in & servaddr, const uint8_t *const re
 			char buffer[128];
 			int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", X, Y, p[0], p[1], p[2]);
 
-			if (fd == -1) {
-				fd = socket(AF_INET, SOCK_STREAM, 0);
+			if (*fd == -1) {
+				*fd = socket(AF_INET, SOCK_STREAM, 0);
 
-				if (connect(fd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
-					close(fd);
-					fd = -1;
+				if (connect(*fd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
+					close(*fd);
+					*fd = -1;
 					continue;
 				}
 			}
 
-			if (!WRITE(fd, buffer, len)) {
-				close(fd);
-				fd = -1;
+			if (!WRITE(*fd, buffer, len)) {
+				close(*fd);
+				*fd = -1;
 			}
 		}
 	}
-
-	close(fd);
 }
 
-void send_udp_frame(const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
+void send_udp_frame(int *const fd, const struct sockaddr_in & servaddr, const uint8_t *const resized, const int destw, const int desth, const int xo, const int yo)
 {
 	char buffer[65536];
-
-	int fd = socket(AF_INET, SOCK_DGRAM, 0);
 
 	buffer[0] = 0;
 	buffer[1] = 0;
@@ -125,16 +119,14 @@ void send_udp_frame(const struct sockaddr_in & servaddr, const uint8_t *const re
 			buffer[o++] = p[2];
 
 			if (o >= 1122 - 6) {
-				sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+				sendto(*fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
 				o = 2;
 			}
 		}
 	}
 
 	if (o > 2)
-		sendto(fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
-
-	close(fd);
+		sendto(*fd, buffer, o, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
 }
 
 void help()
@@ -247,6 +239,8 @@ int main(int argc, char *argv[])
 	servaddr.sin_port = htons(port);
 	servaddr.sin_addr.s_addr = inet_addr(ip);
 
+	int fd = -1;
+
 	for(;;) {
 		int len = 0;
 		get_frame(s, bytes, &len);
@@ -255,9 +249,9 @@ int main(int argc, char *argv[])
 		do_resize(w, h, bytes, destw, desth, &resized);
 
 		if (tcp)
-			send_tcp_frame(servaddr, resized, destw, desth, xo, yo);
+			send_tcp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
 		else 
-			send_udp_frame(servaddr, resized, destw, desth, xo, yo);
+			send_udp_frame(&fd, servaddr, resized, destw, desth, xo, yo);
 
 		free(resized);
 	}
