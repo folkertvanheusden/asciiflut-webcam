@@ -116,6 +116,9 @@ void send_udp_frame(int *const fd, const struct sockaddr_in & servaddr, const ui
 	if (*fd == -1)
 		*fd = socket(AF_INET, SOCK_DGRAM, 0);
 
+	char buffer[1600] { 0 };
+	int len = 0;
+
 	for(int y=0; y<desth; y++) {
 		for(int x=0; x<destw; x++) {
 			const uint8_t *p = &resized[y * destw * 3 + x * 3];
@@ -123,17 +126,22 @@ void send_udp_frame(int *const fd, const struct sockaddr_in & servaddr, const ui
 			int X = xo + x;
 			int Y = yo + y;
 
-			char buffer[128];
-			int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", X, Y, p[0], p[1], p[2]);
+			len += snprintf(&buffer[len], sizeof buffer - len, "PX %d %d %02x%02x%02x\n", X, Y, p[0], p[1], p[2]);
 
-			sendto(*fd, buffer, len, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+			if (len > 1400) {
+				sendto(*fd, buffer, len, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
+				len = 0;
+			}
 		}
 	}
+
+	if (len)
+		sendto(*fd, buffer, len, 0, (const struct sockaddr *) &servaddr, sizeof(servaddr)); 
 }
 
 void help()
 {
-	printf("(C) 2016-2019 by folkert@vanheusden.com\n");
+	printf("(C) 2016-2021 by folkert@vanheusden.com\n");
 	printf("released under agpl v3.0\n");
 	printf("\n");
 	printf("-d  video4linux device\n");
